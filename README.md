@@ -1,4 +1,4 @@
-# Pixaflow Chatbot
+# Gemini Chatbot
 
 A simple AI chatbot built as a technical challenge.
 
@@ -25,7 +25,7 @@ The project contains a React frontend and a Node.js backend responsible for comm
 ## Project Structure
 
 ```text
-pixaflow-chatbot/
+gemini-chatbot/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
@@ -78,7 +78,7 @@ You can create a Gemini API key through Google AI Studio.
 
 ```bash
 git clone <repository-url>
-cd pixaflow-chatbot
+cd gemini-chatbot
 ```
 
 ### 2. Configure the backend
