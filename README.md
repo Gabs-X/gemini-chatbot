@@ -1,375 +1,80 @@
 # Gemini Chatbot
 
-A simple AI chatbot built as a technical challenge.
+**English** | [Português](README.pt-BR.md)
 
-The project contains a React frontend and a Node.js backend responsible for communicating with the Gemini API.
+A small full-stack AI chat built as a technical challenge: a React + TypeScript frontend talks to a Node.js/Express API, which forwards each message to Google's Gemini model and returns the reply. The goal was not feature count but a clean, testable baseline: a thin backend split into route, controller and service layers, the Gemini SDK isolated behind one function, configuration that fails fast at startup, and a test suite that never hits the real API.
 
-## Tech Stack
+## Technical highlights
 
-### Frontend
+- **Layered backend (Route → Controller → Service).** Routes only map endpoints, the controller validates input and shapes HTTP responses, and the service owns the external integration. → [`chatRoutes.ts`](backend/src/routes/chatRoutes.ts), [`chatController.ts`](backend/src/controllers/chatController.ts), [`geminiService.ts`](backend/src/services/geminiService.ts)
+- **Gemini SDK behind a single function.** `askGemini(message)` wraps the official `@google/genai` client (Interactions API, `gemini-3.8-flash`), so swapping the model or provider touches one file. → [`geminiService.ts`](backend/src/services/geminiService.ts)
+- **Fail-fast configuration.** A missing `GEMINI_API_KEY` stops the server at startup instead of failing on the first request; the frontend does the same for `VITE_API_URL`. → [`config/env.ts`](backend/src/config/env.ts), [`chatService.ts`](frontend/src/services/chatService.ts)
+- **App and server split for testing.** [`app.ts`](backend/src/app.ts) builds the Express app without listening, and [`server.ts`](backend/src/server.ts) starts it, which lets Supertest exercise the real routes in-process.
+- **Tests with the external API mocked.** Unit tests for the controller and the service, plus an HTTP test with Supertest, all with Gemini mocked through `vi.mock`, so they are fast, deterministic and free of quota usage. → [`backend/src/tests/`](backend/src/tests/)
+- **Clear error contract.** Empty or missing messages return `400`, Gemini failures are logged and return `500`, and the UI turns any failure into a friendly message. → [`chatController.ts`](backend/src/controllers/chatController.ts), [`chat.tsx`](frontend/src/components/chat.tsx)
+- **Typed, lean frontend.** React 19 with local state in one component (no global store for a single screen), a typed `Message` model, a loading indicator, and Tailwind CSS 4 via the Vite plugin. → [`chat.tsx`](frontend/src/components/chat.tsx), [`types/chat.ts`](frontend/src/types/chat.ts)
 
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
+## Architecture
 
-### Backend
-
-- Node.js
-- Express
-- TypeScript
-- Gemini API
-- Vitest
-- Supertest
-
-## Project Structure
-
-```text
-gemini-chatbot/
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   └── Chat.tsx
-│   │   ├── services/
-│   │   │   └── chatService.ts
-│   │   ├── types/
-│   │   │   └── chat.ts
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
-│
-└── backend/
-    ├── src/
-    │   ├── config/
-    │   │   └── env.ts
-    │   ├── controllers/
-    │   │   └── chatController.ts
-    │   ├── routes/
-    │   │   └── chatRoutes.ts
-    │   ├── services/
-    │   │   └── geminiService.ts
-    │   ├── tests/
-    │   │   ├── chatController.test.ts
-    │   │   ├── geminiService.test.ts
-    │   │   └── chatRoutes.test.ts
-    │   ├── app.ts
-    │   └── server.ts
-    ├── .env.example
-    ├── package.json
-    └── tsconfig.json
+```mermaid
+flowchart LR
+    UI["React UI<br/>chat.tsx"] --> Client["chatService.ts<br/>fetch"]
+    Client -- "POST /api/chat" --> Route["chatRoutes.ts"]
+    Route --> Controller["chatController.ts<br/>validation + HTTP status"]
+    Controller --> Service["geminiService.ts<br/>askGemini()"]
+    Service --> Gemini(("Gemini API"))
 ```
 
-## Requirements
+| Layer | Stack |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, ESLint |
+| Backend | Node.js, Express 5, TypeScript, `@google/genai`, dotenv |
+| Tests | Vitest, Supertest |
 
-Before running the project, make sure you have installed:
+### API
 
-- Node.js
-- npm
-- A valid Gemini API key
+| Method | Path | Body | Response |
+|---|---|---|---|
+| `GET` | `/health` | | `{ "status": "ok" }` |
+| `POST` | `/api/chat` | `{ "message": "Hello" }` | `200 { "reply": "..." }` |
+| | | missing or blank `message` | `400 { "error": "Message is required" }` |
+| | | Gemini failure | `500 { "error": "Could not generate a response" }` |
 
-You can create a Gemini API key through Google AI Studio.
+## Running and testing
 
-## How to Run
+Requirements: Node.js, npm and a Gemini API key from [Google AI Studio](https://aistudio.google.com/).
 
-### 1. Clone the repository
-
-```bash
-git clone <repository-url>
-cd gemini-chatbot
-```
-
-### 2. Configure the backend
-
-Open the backend folder:
+**Backend** (port 3001):
 
 ```bash
 cd backend
-```
-
-Install the dependencies:
-
-```bash
 npm install
-```
-
-Create a `.env` file based on `.env.example`.
-
-```env
-GEMINI_API_KEY=your_api_key_here
-PORT=3001
-```
-
-The application validates the required environment variables when the backend starts.
-
-Start the backend:
-
-```bash
+cp .env.example .env      # set GEMINI_API_KEY (PORT defaults to 3001)
 npm run dev
 ```
 
-The API will be available at:
-
-```text
-http://localhost:3001
-```
-
-### 3. Configure the frontend
-
-Open another terminal and access the frontend folder:
+**Frontend** (port 5173), in a second terminal:
 
 ```bash
 cd frontend
-```
-
-Install the dependencies:
-
-```bash
 npm install
-```
-
-Start the development server:
-
-```bash
+cp .env.example .env      # VITE_API_URL=http://localhost:3001
 npm run dev
 ```
 
-The frontend will usually be available at:
+Then open <http://localhost:5173>.
 
-```text
-http://localhost:5173
-```
-
-### 4. Open the application
-
-Open the following address in your browser:
-
-```text
-http://localhost:5173
-```
-
-Type a message in the chat and the frontend will send it to the backend.
-
-The backend processes the request, communicates with the Gemini API and returns the generated response to the frontend.
-
-## API
-
-### Send a message
-
-```http
-POST /api/chat
-```
-
-Example request:
-
-```json
-{
-  "message": "Hello"
-}
-```
-
-Example response:
-
-```json
-{
-  "reply": "Hello! How can I help you?"
-}
-```
-
-If the message is empty or missing, the API returns:
-
-```json
-{
-  "error": "Message is required"
-}
-```
-
-with HTTP status:
-
-```text
-400 Bad Request
-```
-
-## Application Flow
-
-The application follows this flow:
-
-```text
-React Frontend
-      ↓
-POST /api/chat
-      ↓
-Route
-      ↓
-Controller
-      ↓
-Gemini Service
-      ↓
-Gemini API
-      ↓
-Response
-      ↓
-React Frontend
-```
-
-## Backend Architecture
-
-The backend was separated into small layers with clear responsibilities.
-
-### Routes
-
-Routes define the available HTTP endpoints.
-
-```text
-chatRoutes.ts
-```
-
-### Controllers
-
-Controllers handle request validation and HTTP responses.
-
-```text
-chatController.ts
-```
-
-### Services
-
-Services contain external integrations and business logic.
-
-```text
-geminiService.ts
-```
-
-The Gemini SDK is isolated inside the service so the rest of the application does not depend directly on the external API implementation.
-
-### Config
-
-Environment configuration is centralized inside:
-
-```text
-config/env.ts
-```
-
-The backend fails during startup if a required environment variable is missing instead of waiting until the first request.
-
-## Tests
-
-The backend uses Vitest for automated tests.
-
-Run the tests with:
+**Checks:**
 
 ```bash
-cd backend
-npm test
+cd backend && npm test          # Vitest (watch mode); use `npx vitest run` for a single run
+cd backend && npm run build     # compiles to backend/dist
+cd frontend && npm run build    # type-check + production bundle
+cd frontend && npm run lint
 ```
 
-The test suite covers:
+Only the `.env.example` files are versioned; real `.env` files, `node_modules` and `dist` are ignored.
 
-- Request validation in the chat controller
-- Gemini service behavior
-- Chat API endpoint behavior
+## Status
 
-The Gemini API is mocked during automated tests.
-
-This keeps the tests:
-
-- Fast
-- Deterministic
-- Independent from internet access
-- Independent from Gemini API availability
-- Free from API quota usage
-
-### Unit Tests
-
-The unit tests validate individual parts of the application in isolation.
-
-```text
-chatController.test.ts
-geminiService.test.ts
-```
-
-### Route Test
-
-The route test uses Supertest to validate the HTTP endpoint.
-
-```text
-chatRoutes.test.ts
-```
-
-It verifies the flow between the Express route and the application logic while keeping the external Gemini API mocked.
-
-## Build
-
-### Frontend
-
-```bash
-cd frontend
-npm run build
-```
-
-### Backend
-
-```bash
-cd backend
-npm run build
-```
-
-The generated backend files will be available in:
-
-```text
-backend/dist
-```
-
-## Lint
-
-Frontend linting can be executed with:
-
-```bash
-cd frontend
-npm run lint
-```
-
-## Environment Variables
-
-Example:
-
-```env
-GEMINI_API_KEY=
-PORT=3001
-```
-
-The real `.env` file should never be committed to the repository.
-
-Only `.env.example` should be versioned.
-
-## Error Handling
-
-The application handles common error scenarios such as:
-
-- Empty messages
-- Missing environment configuration
-- Gemini API failures
-- Failed frontend requests
-
-If the Gemini API cannot generate a response, the backend returns an error and the frontend displays a user-friendly message.
-
-## Git
-
-The repository ignores files that should not be versioned, including:
-
-```text
-node_modules
-.env
-dist
-coverage
-```
-
-## Notes
-
-The project was intentionally kept simple because of the scope of the technical challenge.
-
-The backend uses a Route → Controller → Service structure to separate responsibilities without introducing unnecessary complexity.
-
-The frontend also keeps the state management local to the chat component because the application is small and does not require a global state management library.
+Complete for the scope of the challenge: 5 backend tests passing, and the frontend builds and lints cleanly. The scope was kept small on purpose; natural next steps would be conversation history sent to the model, streaming responses and frontend component tests.
